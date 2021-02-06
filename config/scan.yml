@@ -1,0 +1,52 @@
+# Model settings
+val_every: 5
+model_checkpoint_interval: 10
+seed: 1412
+model:
+  name: SCAN
+  parameters:
+    img_h: &img_h 424
+    img_w: &img_w 424
+batch_size: 8
+epochs: 100
+loss_parameters: {}
+optimizer:
+  name: Adam
+  parameters:
+    lr: 0.0003
+lr_scheduler:
+  name: CosineAnnealingLR
+  parameters:
+    T_max: 492700 # 100 * 4927 iterations
+
+# Dataset settings
+datasets:
+  train:
+    type: GalaxyDataset
+    parameters:
+      split: train
+      img_size: [*img_h, *img_w]
+      normalize: false
+      aug_chance: 0
+      augmentations:
+      root: "datasets"
+
+  test:
+    type: GalaxyDataset
+    parameters:
+      split: test
+      img_size: [*img_h, *img_w]
+      normalize: false
+      aug_chance: 0
+      augmentations:
+      root: "datasets"
+
+  val:
+    type: GalaxyDataset
+    parameters:
+      split: val
+      img_size: [*img_h, *img_w]
+      normalize: false
+      aug_chance: 0
+      augmentations:
+      root: "datasets"
