@@ -3,18 +3,24 @@ import torch.nn as nn
 from collections import OrderedDict
 from torch.nn.utils.weight_norm import weight_norm
 
+import numpy as np
+from utils.norm import l2norm
 
-def EncoderImage(data_name, img_dim, embed_size, precomp_enc_type='basic', 
-                 no_imgnorm=False):
+
+def EncoderImage(
+    data_name, img_dim, embed_size, precomp_enc_type="basic", no_imgnorm=False
+):
     """A wrapper to image encoders. Chooses between an different encoders
     that uses precomputed image features.
     """
-    if precomp_enc_type == 'basic':
-        img_enc = EncoderImagePrecomp(
-            img_dim, embed_size, no_imgnorm)
-    elif precomp_enc_type == 'weight_norm':
-        img_enc = EncoderImageWeightNormPrecomp(
-            img_dim, embed_size, no_imgnorm)
+    print('===================================')
+    print(precomp_enc_type)
+    print('===================================')
+    # precomp_enc_type = 'basic'
+    if precomp_enc_type == "basic":
+        img_enc = EncoderImagePrecomp(img_dim, embed_size, no_imgnorm)
+    elif precomp_enc_type == "weight_norm":
+        img_enc = EncoderImageWeightNormPrecomp(img_dim, embed_size, no_imgnorm)
     else:
         raise ValueError("Unknown precomp_enc_type: {}".format(precomp_enc_type))
 
@@ -22,7 +28,6 @@ def EncoderImage(data_name, img_dim, embed_size, precomp_enc_type='basic',
 
 
 class EncoderImagePrecomp(nn.Module):
-
     def __init__(self, img_dim, embed_size, no_imgnorm=False):
         super(EncoderImagePrecomp, self).__init__()
         self.embed_size = embed_size
@@ -32,10 +37,8 @@ class EncoderImagePrecomp(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        """Xavier initialization for the fully connected layer
-        """
-        r = np.sqrt(6.) / np.sqrt(self.fc.in_features +
-                                  self.fc.out_features)
+        """Xavier initialization for the fully connected layer"""
+        r = np.sqrt(6.0) / np.sqrt(self.fc.in_features + self.fc.out_features)
         self.fc.weight.data.uniform_(-r, r)
         self.fc.bias.data.fill_(0)
 
@@ -65,7 +68,6 @@ class EncoderImagePrecomp(nn.Module):
 
 
 class EncoderImageWeightNormPrecomp(nn.Module):
-
     def __init__(self, img_dim, embed_size, no_imgnorm=False):
         super(EncoderImageWeightNormPrecomp, self).__init__()
         self.embed_size = embed_size
