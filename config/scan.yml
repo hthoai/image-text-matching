@@ -1,52 +1,51 @@
 # Model settings
-val_every: 5
-model_checkpoint_interval: 10
-seed: 1412
+val_step: 500 # number of steps to run validation
+model_checkpoint_interval: 2
+seed: 21
+batch_size: 128 # size of a training mini-batch
+epochs: 30 # number of training epochs
 model:
   name: SCAN
   parameters:
-    img_h: &img_h 424
-    img_w: &img_w 424
-batch_size: 8
-epochs: 100
-loss_parameters: {}
+    precomp_enc_type: basic # basic|weight_norm
+    no_imgnorm: True # do not normalize the image embeddings
+    word_dim: 300 # dimensionality of the word embedding
+    bi_gru: True # use bidirectional GRU
+    num_layers: 1 # number of GRU layers
+    no_txtnorm: True # do not normalize the text embeddings
+    img_dim: 2048 # dimensionality of the image embedding
+    embed_size: 1024 # dimensionality of the joint embedding
+    grad_clip: 2.
+loss_parameters:
+  cross_attn: t2i # t2i|i2t
+  raw_feature_norm: clipped_l2norm # clipped_l2norm|l2norm|clipped_l1norm|l1norm|no_norm|softmax
+  agg_func: LogSumExp # LogSumExp|Mean|Max|Sum
+  margin: 0.2 # rank loss margin
+  lambda_lse: 6. # attention LogSumExp temperature
+  lambda_softmax: 9. # attention softmax temperature
 optimizer:
   name: Adam
   parameters:
-    lr: 0.0003
-lr_scheduler:
-  name: CosineAnnealingLR
-  parameters:
-    T_max: 492700 # 100 * 4927 iterations
+    lr: 0.0002 # initial learning rate
+lr_update: 15 # number of epochs to update the learning rate
 
 # Dataset settings
 datasets:
   train:
-    type: GalaxyDataset
+    type: PrecompDataset
     parameters:
       split: train
-      img_size: [*img_h, *img_w]
-      normalize: false
-      aug_chance: 0
-      augmentations:
+      vocab: f30k_precomp_vocab
       root: "datasets"
-
   test:
-    type: GalaxyDataset
+    type: PrecompDataset
     parameters:
       split: test
-      img_size: [*img_h, *img_w]
-      normalize: false
-      aug_chance: 0
-      augmentations:
+      vocab: f30k_precomp_vocab
       root: "datasets"
-
-  val:
-    type: GalaxyDataset
+  dev:
+    type: PrecompDataset
     parameters:
-      split: val
-      img_size: [*img_h, *img_w]
-      normalize: false
-      aug_chance: 0
-      augmentations:
+      split: dev
+      vocab: f30k_precomp_vocab
       root: "datasets"
