@@ -32,13 +32,14 @@ class Vocabulary(object):
         self.word2id = word2id
         self.id2word = id2word
         self.n_word = n_word
+        self.tokenizer = self.load_tokenizer()
 
     def __len__(self) -> int:
         return self.n_word
     
     def __call__(self, word: str) -> int:
         if word not in self.word2id:
-            self.add_word(word)
+            return self.word2id['<unk>']
         return self.word2id[word]
     
     def add_word(self, word: str) -> int:
@@ -49,15 +50,37 @@ class Vocabulary(object):
             self.id2word.append(word)
             self.n_word += 1
         return self.word2id[word]
+
+    def sent2id(self, sent: str) -> List[int]:
+        tokens = self.tokenizer(sent.lower())[0]
+        ids = [self('<start>')]
+        ids += [self(token) for token in tokens]
+        ids += [self('<end>')]
+        return ids
+
+    def load_tokenizer(self) -> Callable:
+        VNCORE_PATH = Path.home() / "vncorenlp"
+
+        if not (VNCORE_PATH / "models/wordsegmenter/wordsegmenter.rdr").exists():
+            Path(VNCORE_PATH / "models/wordsegmenter").mkdir(parents=True, exist_ok=True)
+            os.system("wget https://raw.githubusercontent.com/vncorenlp/VnCoreNLP/master/VnCoreNLP-1.1.1.jar -P %s" % str(VNCORE_PATH))
+            os.system("wget https://raw.githubusercontent.com/vncorenlp/VnCoreNLP/master/models/wordsegmenter/vi-vocab -P %s" % str(VNCORE_PATH/'models/wordsegmenter'))
+            os.system("wget https://raw.githubusercontent.com/vncorenlp/VnCoreNLP/master/models/wordsegmenter/wordsegmenter.rdr -P %s" % str(VNCORE_PATH/'models/wordsegmenter'))
+            print("Downloaded model to %s" % str(VNCORE_PATH))
+        
+        rdr = VnCoreNLP(str(VNCORE_PATH/'VnCoreNLP-1.1.1.jar'), annotators="wseg", max_heap_size='-Xmx500m')
+
+        return rdr.tokenize
+
     
     @classmethod
     def load(cls, file_path: str) -> "Vocabulary":
         with open(file_path) as f:
-            data = json.load(file_path)
+            data = json.load(f)
         
-        n_word = len(data.id2word)
+        n_word = len(data['id2word'])
         print("Loaded %d vocabs from %s" % (n_word, file_path))
-        return cls(data.word2id, data.id2word, n_word)
+        return cls(data['word2id'], data['id2word'], n_word)
         
     
     def save(self, file_path, overwrite=True):
@@ -70,7 +93,11 @@ class Vocabulary(object):
         print("Saved %d vocabs to %s" % (self.n_word, file_path))
 
     @classmethod
-    def build_from_txt(cls, caption_path: str, dataset: str, tokenizer: Callable[[str], str], occurrences_thres: int = 4) -> "Vocabulary":
+    def build_from_txt(cls,
+                       caption_path: str,
+                       dataset: str,
+                       tokenizer: Callable,
+                       occurrences_thres: int = 4) -> "Vocabulary":
         '''Read caption file and build a vocab list from those captions.'''
         
         counter = Counter()
@@ -91,6 +118,11 @@ class Vocabulary(object):
                 counter.update(tokenized_cap[0])
 
         vocab = cls()
+        vocab.add_word('<pad>')
+        vocab.add_word('<start>')
+        vocab.add_word('<end>')
+        vocab.add_word('<unk>')
+
         
         for word, count in counter.items():
             if count > occurrences_thres:

@@ -18,9 +18,9 @@ class Config:
     def __repr__(self):
         return self.config_str
 
-    def get_dataset(self, split):
-        return getattr(datasets, self.config["datasets"][split]["type"])(
-            **self.config["datasets"][split]["parameters"]
+    def get_dataset(self, data_split):
+        return getattr(datasets, self.config["datasets"][data_split]["type"])(
+            **self.config["datasets"][data_split]["parameters"]
         )
 
     def get_model(self, **kwargs):
@@ -33,19 +33,11 @@ class Config:
             model_parameters, **self.config["optimizer"]["parameters"]
         )
 
-    def get_lr_scheduler(self, optimizer):
-        return getattr(torch.optim.lr_scheduler, self.config["lr_scheduler"]["name"])(
-            optimizer, **self.config["lr_scheduler"]["parameters"]
-        )
-
     def get_loss_parameters(self):
         return self.config["loss_parameters"]
 
-    # def get_train_parameters(self):
-    #     return self.config['train_parameters']
-
-    # def get_test_parameters(self):
-    #     return self.config['test_parameters']
+    def get_lr_update(self):
+        return self.config["lr_update"]
 
     def __getitem__(self, item):
         return self.config[item]

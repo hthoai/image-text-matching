@@ -1,45 +1,32 @@
-# %%writefile model.py
-# -----------------------------------------------------------
-# Stacked Cross Attention Network implementation based on 
-# https://arxiv.org/abs/1803.08024.
-# "Stacked Cross Attention for Image-Text Matching"
-# Kuang-Huei Lee, Xi Chen, Gang Hua, Houdong Hu, Xiaodong He
-#
-# Writen by Kuang-Huei Lee, 2018
-# ---------------------------------------------------------------
 """SCAN model"""
 
 import torch
-import torch.nn as nn
-import torch.nn.init
-import torchvision.models as models
-from torch.nn.utils.clip_grad import clip_grad_norm_
 import numpy as np
-# import torch_xla
-# import torch_xla.core.xla_model as xm
+import torch.nn as nn
+from torch.nn.utils.clip_grad import clip_grad_norm_
 
+from lib.models.encoder import ImageEncoder, TextEncoder
+from lib.contrastive_loss import ContrastiveLoss
 device = "cuda"
 
 
-class SCAN(object):
+class SCAN(nn.Module):
     """
     Stacked Cross Attention Network (SCAN) model
     """
-    def __init__(self, opt):
-        # Build Models
-        self.grad_clip = opt.grad_clip
-        self.img_enc = EncoderImage(opt.data_name, opt.img_dim, opt.embed_size,
-                                    precomp_enc_type=opt.precomp_enc_type,
-                                    no_imgnorm=opt.no_imgnorm)
-        self.txt_enc = EncoderText(opt.vocab_size, opt.word_dim,
-                                   opt.embed_size, opt.num_layers, 
-                                   use_bi_gru=opt.bi_gru,  
-                                   no_txtnorm=opt.no_txtnorm)
-        # if torch.cuda.is_available():
-        self.img_enc.to(device)
-        self.txt_enc.to(device)
-            # cudnn.benchmark = True
+    def __init__(self,
+                 grad_clip:int,
+                 img_size: int,
+                 enc_size: int,
+                 vocab_size: int,
+                 emb_size: int):
 
+        # Build Models
+        self.grad_clip = grad_clip
+        self.img_enc = ImageEncoder(img_size, enc_size)
+        self.txt_enc = TextEncoder(vocab_size, emb_size, enc_size)
+
+        
         # Loss and Optimizer
         self.criterion = ContrastiveLoss(opt=opt,
                                          margin=opt.margin,
@@ -52,37 +39,16 @@ class SCAN(object):
         self.optimizer = torch.optim.Adam(params, lr=opt.learning_rate)
 
         self.Eiters = 0
+    
+    def cuda(self, device=None):
+        self.img_enc.cuda(device)
+        self.txt_enc.cuda(device)
+        # cudnn.benchmark = True
 
-    def state_dict(self):
-        state_dict = [self.img_enc.state_dict(), self.txt_enc.state_dict()]
-        return state_dict
 
-    def load_state_dict(self, state_dict):
-        self.img_enc.load_state_dict(state_dict[0])
-        self.txt_enc.load_state_dict(state_dict[1])
-
-    def train_start(self):
-        """switch to train mode
-        """
-        self.img_enc.train()
-        self.txt_enc.train()
-
-    def val_start(self):
-        """switch to evaluate mode
-        """
-        self.img_enc.eval()
-        self.txt_enc.eval()
-
-    def forward_emb(self, images, captions, lengths, volatile=False):
+    def forward(self, images, captions, lengths):
         """Compute the image and caption embeddings
         """
-        # Set mini-batch dataset
-        images = Variable(images, volatile=volatile)
-        captions = Variable(captions, volatile=volatile)
-        # if torch.cuda.is_available():
-        images = images.to(device)
-        captions = captions.to(device)
-
         # Forward
         img_emb = self.img_enc(images)
 
