@@ -1,11 +1,16 @@
 from typing import Any
-import torch
-import torch.utils.data as data
-import nltk
 import numpy as np
 
+import os
+import json
 
-class PrecompDataset(data.Dataset):
+import torch
+import torch.utils.data as data
+
+from utils.vocab_vi import ViVocabulary
+
+
+class PrecompViDataset(data.Dataset):
     """
     Load precomputed captions and image features
     Possible options: f30k_precomp, coco_precomp
@@ -15,18 +20,21 @@ class PrecompDataset(data.Dataset):
         self.split = split
         self.max_length = 0
         loc = root + "/"
-        self.vocab = 
+        self.vocab = ViVocabulary()
+        with open(os.path.join(root, 'f30k_precomp_vocab_vi.json')) as f:
+            d = json.load(f)
+        self.vocab.word2id = d["word2id"]
+        self.vocab.id2word = d["id2word"]
 
-        # Tokens
+        # captions
         self.tokens = []
-        with open(loc + "%s_caps.txt" % split, "rb") as f:
+        with open(loc + "%s_caps_vi.txt" % split, "r") as f:
             for line in f:
-                # tokenize
-                _tokens = nltk.tokenize.word_tokenize(str(line.strip()).lower())
-                self.tokens.append(_tokens)
-                if len(_tokens) > self.max_length:
-                    self.max_length = len(_tokens)
-            self.max_length += 2 # for <start>, <end> tokens
+                _caption = line.strip()
+                to_id = self.vocab.sent2id(_caption)
+                self.tokens.append(to_id)
+                if len(to_id) > self.max_length:
+                    self.max_length = len(to_id)
 
         # Image features
         self.images = np.load(loc + "%s_ims.npy" % self.split)
@@ -45,14 +53,8 @@ class PrecompDataset(data.Dataset):
         img_id = index // self.im_div
         image = torch.Tensor(self.images[img_id])
         tokens = self.tokens[index]
-        vocab = self.vocab
 
-        # Convert tokens to word ids.
-        caption = []
-        caption.append(vocab("<start>"))
-        caption.extend([vocab(token) for token in tokens])
-        caption.append(vocab("<end>"))
-        target = torch.Tensor(caption)
+        target = torch.Tensor(tokens)
         return image, target, index, img_id
 
     def __len__(self):
@@ -79,7 +81,7 @@ def collate_fn(data):
     images = torch.stack(images, 0)
 
     # Merget captions (convert tuple of 1D tensor to 2D tensor)
-    lengths = [len(cap) for cap in captions]
+    lengths = torch.Tensor([len(cap) for cap in captions])
     targets = torch.zeros(len(captions), max(lengths)).long()
     for i, cap in enumerate(captions):
         end = lengths[i]
