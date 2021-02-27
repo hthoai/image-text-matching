@@ -11,14 +11,8 @@
 from typing import Any
 import torch
 import torch.utils.data as data
-import torchvision.transforms as transforms
-import os
 import nltk
-from PIL import Image
 import numpy as np
-import json as jsonmod
-
-from yaml import tokens
 
 
 class PrecompDataset(data.Dataset):

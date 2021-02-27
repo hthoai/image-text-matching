@@ -4,6 +4,8 @@ import torch.nn.functional as F
 
 from utils.attention import xattn_score_t2i, xattn_score_i2t
 
+DEVICE = 'cuda'
+
 
 class ContrastiveLoss(nn.Module):
     """
@@ -56,9 +58,7 @@ class ContrastiveLoss(nn.Module):
 
         # clear diagonals
         mask = torch.eye(scores.size(0)) > 0.5
-        # I = Variable(mask)
-        # if torch.cuda.is_available():
-        I = mask.to("cuda")
+        I = mask.to(DEVICE)
         cost_s = cost_s.masked_fill_(I, 0)
         cost_im = cost_im.masked_fill_(I, 0)
 

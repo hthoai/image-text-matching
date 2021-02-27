@@ -5,9 +5,6 @@ import logging
 import subprocess
 from typing import Any, Tuple
 
-import pandas as pd
-from tqdm import tqdm
-
 from lib.config import Config
 
 import torch
