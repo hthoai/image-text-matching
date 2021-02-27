@@ -1,14 +1,70 @@
 import os
 import re
-import json
 import logging
 import subprocess
 from typing import Any, Tuple
+
+from collections import OrderedDict
 
 from lib.config import Config
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
+
+
+class AverageMeter(object):
+    """Computes and stores the average and current value"""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.val = 0
+        self.avg = 0
+        self.sum = 0
+        self.count = 0
+
+    def update(self, val, n=0):
+        self.val = val
+        self.sum += val * n
+        self.count += n
+        self.avg = self.sum / (0.0001 + self.count)
+
+    def __str__(self):
+        """String representation for logging"""
+        # for values that should be recorded exactly e.g. iteration number
+        if self.count == 0:
+            return str(self.val)
+        # for stats
+        return "%.4f (%.4f)" % (self.val, self.avg)
+
+
+class LogCollector(object):
+    """A collection of logging objects that can change from train to val"""
+
+    def __init__(self):
+        # to keep the order of logged variables deterministic
+        self.meters = OrderedDict()
+
+    def update(self, k, v, n=0):
+        # create a new meter if previously not recorded
+        if k not in self.meters:
+            self.meters[k] = AverageMeter()
+        self.meters[k].update(v, n)
+
+    def __str__(self):
+        """Concatenate the meters in one log line"""
+        s = ""
+        for i, (k, v) in enumerate(self.meters.items()):
+            if i > 0:
+                s += "  "
+            s += k + " " + str(v)
+        return s
+
+    def tb_log(self, tb_logger, prefix="", step=None):
+        """Log using tensorboard"""
+        for k, v in self.meters.items():
+            tb_logger.log_value(prefix + k, v.val, step=step)
 
 
 class Experiment:
@@ -146,6 +202,12 @@ class Experiment:
         type_info = "Text to image" if (type == "t2i") else "Image to text"
         self.logger.info(f"{type_info}: {r1}, {r5}, {r10}, {medr}, {meanr}")
 
+
+    def encode_data_start_callback(self) -> Tuple[AverageMeter, LogCollector]:
+        batch_time = AverageMeter()
+        val_logger = LogCollector()
+        return batch_time, val_logger
+
     def train_start_callback(self, cfg: Config) -> None:
         self.logger.debug(f"Beginning training session. CFG used: {cfg}")
 
@@ -169,3 +231,5 @@ class Experiment:
                 results[key],
                 iter_evaluated,
             )
+
+
