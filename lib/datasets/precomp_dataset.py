@@ -39,7 +39,7 @@ class PrecompDataset(data.Dataset):
 
         # Image features
         self.images = np.load(loc + "%s_ims.npy" % self.split)
-        self.length = len(self.captions)
+        self.length = len(self.tokens)
         # rkiros data has redundancy in images, we divide by 5, 10crop doesn't
         if self.images.shape[0] != self.length:
             self.im_div = 5
@@ -53,13 +53,13 @@ class PrecompDataset(data.Dataset):
         # handle the image redundancy
         img_id = index // self.im_div
         image = torch.Tensor(self.images[img_id])
-        caption = self.captions[index]
+        tokens = self.tokens[index]
         vocab = self.vocab
 
         # Convert tokens to word ids.
         caption = []
         caption.append(vocab("<start>"))
-        caption.extend([vocab(token) for token in self.tokens])
+        caption.extend([vocab(token) for token in tokens])
         caption.append(vocab("<end>"))
         target = torch.Tensor(caption)
         return image, target, index, img_id
