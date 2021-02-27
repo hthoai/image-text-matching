@@ -8,15 +8,11 @@ from utils.norm import l2norm
 
 
 def EncoderImage(
-    data_name, img_dim, embed_size, precomp_enc_type="basic", no_imgnorm=False
+    img_dim, embed_size, precomp_enc_type="basic", no_imgnorm=False
 ):
     """A wrapper to image encoders. Chooses between an different encoders
     that uses precomputed image features.
     """
-    print('===================================')
-    print(precomp_enc_type)
-    print('===================================')
-    # precomp_enc_type = 'basic'
     if precomp_enc_type == "basic":
         img_enc = EncoderImagePrecomp(img_dim, embed_size, no_imgnorm)
     elif precomp_enc_type == "weight_norm":
