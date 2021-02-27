@@ -1,3 +1,5 @@
+# python main.py --mode train --exp_name scan_0227-0600 --cfg config/scan.yml
+
 import logging
 import argparse
 
@@ -8,14 +10,11 @@ from lib.runner import Runner
 from lib.experiment import Experiment
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Galaxy Morphological Classification")
-    parser.add_argument(
-        "mode", choices=["train", "test", "pred"], help="Train, eval or predict?"
-    )
-    parser.add_argument("--exp_name", help="Experiment name", required=True)
-    parser.add_argument("--cfg", help="Config file")
-    parser.add_argument("--model_nb", help="Model number (epoch number)")
+def parse_args() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Image Text Matching")
+    parser.add_argument("--mode", default="train", help="Train or test?")
+    parser.add_argument("--exp_name", default="debug", help="Experiment name")
+    parser.add_argument("--cfg", default="config/scan.yml", help="Config file")
     parser.add_argument("--resume", action="store_true", help="Resume training")
     parser.add_argument("--epoch", type=int, help="Epoch to test the model on")
     parser.add_argument(
@@ -30,15 +29,11 @@ def parse_args():
         raise Exception("args.resume is set on `test` mode: can't resume testing")
     if args.epoch is not None and args.mode == "train":
         raise Exception("The `epoch` parameter should not be set when training")
-    if args.cpu:
-        raise Exception(
-            "CPU training/testing is not supported: the NMS procedure is only implemented for CUDA"
-        )
 
     return args
 
 
-def main():
+def main() -> None:
     args = parse_args()
     exp = Experiment(args.exp_name, args, mode=args.mode)
     if args.cfg is None:
@@ -58,12 +53,9 @@ def main():
             runner.train()
         except KeyboardInterrupt:
             logging.info("Training interrupted.")
-    elif args.mode == "test":
-        runner.eval(epoch=args.epoch or exp.get_last_checkpoint_epoch())
     else:
-        runner.predict(args.model_nb)
+        runner.eval(epoch=args.epoch or exp.get_last_checkpoint_epoch())
 
 
 if __name__ == "__main__":
     main()
-    

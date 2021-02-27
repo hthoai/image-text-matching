@@ -2,13 +2,11 @@ from typing import Tuple
 from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import (
-    pack_padded_sequence,
-    pad_packed_sequence
-)
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+
 
 class ImageEncoder(nn.Module):
-    '''An image feature wraper'''
+    """An image feature wraper"""
 
     def __init__(self,
                  img_size: int,
@@ -18,17 +16,17 @@ class ImageEncoder(nn.Module):
         
         self.fc = nn.Linear(img_size, enc_size)
 
+        self.fc = nn.Linear(img_dim, emb_dim)
 
         self.init_weights()
 
     def init_weights(self):
-        ''' Xavier initialization for the fully connected layer'''
+        """ Xavier initialization for the fully connected layer"""
 
         pass
 
-    def forward(self,
-                images: Tensor) -> Tensor:
-        '''Extract image features and project them onto joint embedding space'''
+    def forward(self, images: Tensor) -> Tensor:
+        """Extract image features and project them onto joint embedding space"""
 
         img_emb = self.fc(images)
 
@@ -39,6 +37,7 @@ class ImageEncoder(nn.Module):
         # img_emb  = [batch size, img region count, enc size]
 
         return img_emb
+
 
 class TextEncoder(nn.Module):
     '''Text encoder model'''

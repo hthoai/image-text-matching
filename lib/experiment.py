@@ -3,9 +3,9 @@ import re
 import json
 import logging
 import subprocess
+from typing import Any, Tuple
 
-import pandas as pd
-from tqdm import tqdm
+from lib.config import Config
 
 import torch
 from torch.utils.tensorboard import SummaryWriter
@@ -14,11 +14,11 @@ from torch.utils.tensorboard import SummaryWriter
 class Experiment:
     def __init__(
         self,
-        exp_name,
-        args=None,
-        mode="train",
-        exps_basedir="experiments",
-        tensorboard_dir="tensorboard",
+        exp_name: str,
+        args: Any = None,
+        mode: str = "train",
+        exps_basedir: str = "experiments",
+        tensorboard_dir: str = "tensorboard",
     ):
         self.name = exp_name
         self.exp_dirpath = os.path.join(exps_basedir, exp_name)
@@ -37,26 +37,26 @@ class Experiment:
         if args is not None:
             self.log_args(args)
 
-    def setup_exp_dir(self):
+    def setup_exp_dir(self) -> None:
         if not os.path.exists(self.exp_dirpath):
             os.makedirs(self.exp_dirpath)
             os.makedirs(self.models_dirpath)
-            # self.save_code_state()
+            self.save_code_state()
 
-    # def save_code_state(self):
-    #     state = "Git hash: {}".format(
-    #         subprocess.run(
-    #             ["git", "rev-parse", "HEAD"], stdout=subprocess.PIPE, check=False
-    #         ).stdout.decode("utf-8")
-    #     )
-    #     state += "\n*************\nGit diff:\n*************\n"
-    #     state += subprocess.run(
-    #         ["git", "diff"], stdout=subprocess.PIPE, check=False
-    #     ).stdout.decode("utf-8")
-    #     with open(self.code_state_path, "w") as code_state_file:
-    #         code_state_file.write(state)
+    def save_code_state(self) -> None:
+        state = "Git hash: {}".format(
+            subprocess.run(
+                ["git", "rev-parse", "HEAD"], stdout=subprocess.PIPE, check=False
+            ).stdout.decode("utf-8")
+        )
+        state += "\n*************\nGit diff:\n*************\n"
+        state += subprocess.run(
+            ["git", "diff"], stdout=subprocess.PIPE, check=False
+        ).stdout.decode("utf-8")
+        with open(self.code_state_path, "w") as code_state_file:
+            code_state_file.write(state)
 
-    def setup_logging(self):
+    def setup_logging(self) -> None:
         formatter = logging.Formatter(
             "[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s"
         )
@@ -71,17 +71,17 @@ class Experiment:
         )
         self.logger = logging.getLogger(__name__)
 
-    def log_args(self, args):
+    def log_args(self, args: Any) -> None:
         self.logger.debug("CLI Args:\n %s", str(args))
 
-    def set_cfg(self, cfg, override=False):
+    def set_cfg(self, cfg: Config, override: bool = False) -> None:
         assert "model_checkpoint_interval" in cfg
         self.cfg = cfg
         if not os.path.exists(self.cfg_path) or override:
             with open(self.cfg_path, "w") as cfg_file:
                 cfg_file.write(str(cfg))
 
-    def get_last_checkpoint_epoch(self):
+    def get_last_checkpoint_epoch(self) -> int:
         pattern = re.compile("model_(\\d+).pt")
         last_epoch = -1
         for ckpt_file in os.listdir(self.models_dirpath):
@@ -93,90 +93,79 @@ class Experiment:
 
         return last_epoch
 
-    def get_checkpoint_path(self, epoch):
+    def get_checkpoint_path(self, epoch: int) -> str:
         return os.path.join(self.models_dirpath, "model_{:04d}.pt".format(epoch))
 
-    def get_epoch_model(self, epoch):
+    def get_epoch_model(self, epoch: int) -> Any:
         return torch.load(self.get_checkpoint_path(epoch))["model"]
 
-    def load_last_train_state(self, model, optimizer, scheduler):
+    def load_last_train_state(self, model: Any, optimizer: Any) -> Tuple[int, Any, Any]:
         epoch = self.get_last_checkpoint_epoch()
         train_state_path = self.get_checkpoint_path(epoch)
         train_state = torch.load(train_state_path)
         model.load_state_dict(train_state["model"])
         optimizer.load_state_dict(train_state["optimizer"])
-        scheduler.load_state_dict(train_state["scheduler"])
 
-        return epoch, model, optimizer, scheduler
+        return epoch, model, optimizer
 
-    def save_train_state(self, epoch, model, optimizer, scheduler):
+    def save_train_state(self, epoch: int, model: Any, optimizer: Any) -> None:
         train_state_path = self.get_checkpoint_path(epoch)
         torch.save(
             {
                 "epoch": epoch,
                 "model": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
-                "scheduler": scheduler.state_dict(),
+                # "scheduler": scheduler.state_dict(),
             },
             train_state_path,
         )
 
     def iter_end_callback(
-        self, epoch, max_epochs, iter_nb, max_iter, loss, loss_components
-    ):
+        self, epoch: int, max_epochs: int, iter_nb: int, max_iter: int, loss: float
+    ) -> None:
         line = "Epoch [{}/{}] - Iter [{}/{}] - Loss: {:.5f} - ".format(
             epoch, max_epochs, iter_nb, max_iter, loss
         )
-        line += " - ".join(
-            [
-                "{}: {:.5f}".format(component, loss_components[component])
-                for component in loss_components
-            ]
-        )
         self.logger.debug(line)
         overall_iter = (epoch * max_iter) + iter_nb
-        self.tensorboard_writer.add_scalar("loss/rmse", loss, overall_iter)
-        for key in loss_components:
-            self.tensorboard_writer.add_scalar(
-                "loss/{}".format(key), loss_components[key], overall_iter
-            )
+        self.tensorboard_writer.add_scalar("loss/total_loss", loss, overall_iter)
 
-    def epoch_start_callback(self, epoch, max_epochs):
+    def epoch_start_callback(self, epoch: int, max_epochs: int) -> None:
         self.logger.debug(f"Epoch [{epoch}/{max_epochs}] starting.")
 
-    def epoch_end_callback(self, epoch, max_epochs, model, optimizer, scheduler):
+    def epoch_end_callback(
+        self, epoch: int, max_epochs: int, model: Any, optimizer: Any
+    ) -> None:
         self.logger.debug(f"Epoch [{epoch}/{max_epochs}] finished.")
         if epoch % self.cfg["model_checkpoint_interval"] == 0:
-            self.save_train_state(epoch, model, optimizer, scheduler)
+            self.save_train_state(epoch, model, optimizer)
 
-    def train_start_callback(self, cfg):
-        self.logger.debug("Beginning training session. CFG used:\n%s", str(cfg))
+    def retrieval_end_callback(
+        self, type: str, r1: int, r5: int, r10: int, medr: int, meanr: int
+    ) -> None:
+        type_info = "Text to image" if (type == "t2i") else "Image to text"
+        self.logger.info(f"{type_info}: {r1}, {r5}, {r10}, {medr}, {meanr}")
 
-    def train_end_callback(self):
+    def train_start_callback(self, cfg: Config) -> None:
+        self.logger.debug(f"Beginning training session. CFG used: {cfg}")
+
+    def train_end_callback(self) -> None:
         self.logger.debug("Training session finished.")
 
-    def eval_start_callback(self, cfg):
-        self.logger.debug("Beginning testing session. CFG used:\n%s", str(cfg))
+    def eval_start_callback(self, cfg: Config) -> None:
+        self.logger.debug(f"Beginning testing session. CFG used:{cfg}")
 
-    def eval_end_callback(self, dataset, epoch_evaluated, results, on_val):
+    def eval_end_callback(
+        self, dataset_split, iter_evaluated: int, results: dict
+    ) -> None:
         self.logger.debug(
-            "Testing session finished on model after epoch %d.", epoch_evaluated
+            f"Testing session finished on model after iter {iter_evaluated}"
         )
-        if on_val == False:
-            results["test_rmse"] = results["eval_rmse"]
-            del results["eval_rmse"]
         self.logger.info("Results:\n %s", str(results))
         # Log tensorboard metrics
         for key in results:
             self.tensorboard_writer.add_scalar(
-                "{}_metrics/{}".format(dataset.split, key),
+                "{}_metrics/{}".format(dataset_split, key),
                 results[key],
-                epoch_evaluated,
+                iter_evaluated,
             )
-
-    def pred_start_callback(self, cfg):
-        self.logger.debug("Beginning predicting session. CFG used:\n%s", str(cfg))
-
-    def pred_end_callback(self):
-        self.logger.debug("Prediction session finished.")
-        

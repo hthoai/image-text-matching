@@ -12,6 +12,9 @@ CAPTIONS = {
         'f30k_precomp': ['train_caps_vi.txt', 'dev_caps_vi.txt'],
     }
 
+
+
+
 def load_rdrsegmenter():
     VNCORE_PATH = Path.home() / "vncorenlp"
 

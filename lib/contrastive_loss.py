@@ -17,6 +17,8 @@ class ContrastiveLoss(nn.Module):
     def forward(self, im, s, s_l):
         # compute image-sentence score matrix
         scores = xattn_score_t2i(im, s, s_l, self.opt)
+
+        # scores: n imgs, n caps
         
         diagonal = scores.diag().view(im.size(0), 1)
         d1 = diagonal.expand_as(scores)
@@ -70,24 +72,16 @@ def xattn_score_t2i(images, captions, cap_lens, opt):
         weiContext = weiContext.contiguous()
         # (n_image, n_word)
         row_sim = cosine_similarity(cap_i_expand, weiContext, dim=2)
-        if opt.agg_func == 'LogSumExp':
-            row_sim.mul_(opt.lambda_lse).exp_()
-            row_sim = row_sim.sum(dim=1, keepdim=True)
-            row_sim = torch.log(row_sim)/opt.lambda_lse
-        elif opt.agg_func == 'Max':
-            row_sim = row_sim.max(dim=1, keepdim=True)[0]
-        elif opt.agg_func == 'Sum':
-            row_sim = row_sim.sum(dim=1, keepdim=True)
-        elif opt.agg_func == 'Mean':
-            row_sim = row_sim.mean(dim=1, keepdim=True)
-        else:
-            raise ValueError("unknown aggfunc: {}".format(opt.agg_func))
+        
+        row_sim = row_sim.mean(dim=1, keepdim=True)
+        
         similarities.append(row_sim)
 
     # (n_image, n_caption)
     similarities = torch.cat(similarities, 1)
     
     return similarities
+
 
 
 def func_attention(query, context, smooth, eps=1e-8):
@@ -106,6 +100,13 @@ def func_attention(query, context, smooth, eps=1e-8):
     # (batch, sourceL, d)(batch, d, queryL)
     # --> (batch, sourceL, queryL)
     attn = torch.bmm(context, queryT)
+
+    # calculate cosine sim
+    q_norm = F.normalize(query, dim=-1) # q_norm: (batch, queryL, d)
+    c_norm = F.normalize(context, dim=-1) # c_norm: (batch, contextL, d)
+    q_transposed = q_norm.transpose(-1, -2) #q_transposed (batch, d, queryL)\
+    attn = torch.matmul(c_norm, q_transposed)
+
     
 
     attn = nn.LeakyReLU(0.1)(attn)

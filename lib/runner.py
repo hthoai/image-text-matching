@@ -1,140 +1,176 @@
 import pickle
 import random
 import logging
+import os
+from typing import Any
 
 import cv2
 import torch
+from torch._C import device
+from torch.nn.utils.clip_grad import clip_grad_norm_
+from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm, trange
 
+from utils.vocab import deserialize_vocab
+from lib.datasets.precomp_dataset import collate_fn
+from lib.evaluation import *
+from lib.config import Config
+from lib.experiment import Experiment
+
 
 class Runner:
-    def __init__(self, cfg, exp, device, resume=False, deterministic=False):
+    def __init__(
+        self,
+        cfg: Config,
+        exp: Experiment,
+        device: torch.device,
+        resume: bool = False,
+        deterministic: bool = False,
+    ):
         self.cfg = cfg
         self.exp = exp
         self.device = device
         self.resume = resume
         self.logger = logging.getLogger(__name__)
+        self.iters = 0
 
         # Fix seeds
-        torch.manual_seed(cfg['seed'])
-        np.random.seed(cfg['seed'])
-        random.seed(cfg['seed'])
+        torch.manual_seed(cfg["seed"])
+        np.random.seed(cfg["seed"])
+        random.seed(cfg["seed"])
+
+        # Load Vocabulary Wrapper
+        self.vocab = deserialize_vocab(
+            os.path.join("vocab", self.cfg.get_vocab_path() + ".json")
+        )
+        self.vocab_size = len(self.vocab)
 
         if deterministic:
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
 
-    def train(self):
+    def train(self) -> None:
         self.exp.train_start_callback(self.cfg)
         starting_epoch = 1
-        model = self.cfg.get_model()
+
+        model = self.cfg.get_model(self.vocab_size)
         model = model.to(self.device)
         optimizer = self.cfg.get_optimizer(model.parameters())
         # scheduler = self.cfg.get_lr_scheduler(optimizer)
         if self.resume:
-            last_epoch, model, optimizer, scheduler = self.exp.load_last_train_state(model, optimizer)
+            last_epoch, model, optimizer = self.exp.load_last_train_state(
+                model, model.optimizer
+            )
             starting_epoch = last_epoch + 1
-        max_epochs = self.cfg['epochs']
-        train_loader = self.get_train_dataloader()
-        loss_parameters = self.cfg.get_loss_parameters()
-        for epoch in trange(starting_epoch, max_epochs + 1, initial=starting_epoch - 1, total=max_epochs):
+        max_epochs = self.cfg["epochs"]
+        train_loader = self.get_precomp_loader("train")
+        val_loader = self.get_precomp_loader("dev")
+        # loss_parameters = self.cfg.get_loss_parameters()
+        for epoch in trange(
+            starting_epoch, max_epochs + 1, initial=starting_epoch - 1, total=max_epochs
+        ):
             self.exp.epoch_start_callback(epoch, max_epochs)
-            model.train_start()
             pbar = tqdm(train_loader)
-            for i, (images, captions, lengths) in enumerate(pbar):
-                # Forward pass
-                # compute the embeddings
-                img_emb, cap_emb, cap_lens = model.forward_emb(images, captions, lengths)
-                # outputs = model(images, **self.cfg.get_train_parameters())
-                loss = model.forward_loss(img_emb, cap_emb, cap_lens)
-
-                # Backward and optimize
+            for idx, (images, captions, lengths, ids) in enumerate(pbar):
+                model.train()
+                # load to gpu
+                images = images.to(self.device)
+                captions = captions.to(self.device)
+                # zero the parameter gradients
                 optimizer.zero_grad()
+                # compute the embeddings
+                img_emb, cap_emb, cap_lens = model(images, captions, lengths)
+                # record loss
+                loss = model.loss(img_emb, cap_emb, cap_lens)
+                # backward
                 loss.backward()
+                # gradient clipping
+                if model.grad_clip > 0:
+                    clip_grad_norm_(model.parameters(), model.grad_clip)
+                # optimize
                 optimizer.step()
 
-                # Scheduler step (iteration based)
-                # scheduler.step()
-
-                # Log
-                # postfix_dict = {key: float(value) for key, value in loss_dict_i.items()}
+                # log
                 postfix_dict = {}
-                postfix_dict['lr'] = optimizer.param_groups[0]["lr"]
-                self.exp.iter_end_callback(epoch, max_epochs, i, len(train_loader), loss.item(), postfix_dict)
-                postfix_dict['loss'] = loss.item()
+                postfix_dict["lr"] = optimizer.param_groups[0]["lr"]
+                self.exp.iter_end_callback(
+                    epoch, max_epochs, idx, len(train_loader), loss.item()
+                )
+                postfix_dict["loss"] = loss.item()
                 pbar.set_postfix(ordered_dict=postfix_dict)
-            self.exp.epoch_end_callback(epoch, max_epochs, model, optimizer, scheduler)
+
+                self.iters += 1
+                if self.iters % self.cfg["val_step"] == 0:
+                    self.eval(model, val_loader)
+            self.exp.epoch_end_callback(epoch, max_epochs, model, optimizer)
 
             # Validate
-            if (epoch + 1) % self.cfg['val_every'] == 0:
-                self.eval(epoch, on_val=True)
+            # iters += 1
+            # if iters % self.cfg['val_step'] == 0:
+            #     self.eval(model)
         self.exp.train_end_callback()
 
-    def eval(self, epoch, on_val=False, save_predictions=False):
-        model = self.cfg.get_model()
-        model_path = self.exp.get_checkpoint_path(epoch)
-        self.logger.info('Loading model %s', model_path)
-        model.load_state_dict(self.exp.get_epoch_model(epoch))
-        model = model.to(self.device)
-        model.eval()
-        if on_val:
-            dataloader = self.get_val_dataloader()
-        else:
-            dataloader = self.get_test_dataloader()
-        test_parameters = self.cfg.get_test_parameters()
-        predictions = []
+    def eval(self, model: Any, val_loader: DataLoader) -> float:
         self.exp.eval_start_callback(self.cfg)
-        with torch.no_grad():
-            for idx, (images, _, _) in enumerate(tqdm(dataloader)):
-                images = images.to(self.device)
-                output = model(images, **test_parameters)
-                prediction = model.decode(output, as_lanes=True)
-                predictions.extend(prediction)
-                if self.view:
-                    img = (images[0].cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-                    img, fp, fn = dataloader.dataset.draw_annotation(idx, img=img, pred=prediction[0])
-                    if self.view == 'mistakes' and fp == 0 and fn == 0:
-                        continue
-                    cv2.imshow('pred', img)
-                    cv2.waitKey(0)
+        params = self.cfg["model"]["parameters"]
+        # compute the encoding for all the validation images and captions
+        img_embs, cap_embs, cap_lens = encode_data(model, val_loader)
 
-        if save_predictions:
-            with open('predictions.pkl', 'wb') as handle:
-                pickle.dump(predictions, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        self.exp.eval_end_callback(dataloader.dataset.dataset, predictions, epoch)
+        img_embs = np.array([img_embs[i] for i in range(0, len(img_embs), 5)])
 
-    def get_train_dataloader(self):
-        train_dataset = self.cfg.get_dataset('train')
-        train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                                   batch_size=self.cfg['batch_size'],
-                                                   shuffle=True,
-                                                   num_workers=8,
-                                                   worker_init_fn=self._worker_init_fn_)
-        return train_loader
+        start = time.time()
+        if params["cross_attn"] == "t2i":
+            sims = shard_xattn_t2i(img_embs, cap_embs, cap_lens, params, shard_size=128)
+        elif params["cross_attn"] == "i2t":
+            sims = shard_xattn_i2t(img_embs, cap_embs, cap_lens, params, shard_size=128)
+        else:
+            raise NotImplementedError
+        end = time.time()
+        print("Calculate similarity time:", end - start)
 
-    def get_test_dataloader(self):
-        test_dataset = self.cfg.get_dataset('test')
-        test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
-                                                  batch_size=self.cfg['batch_size'] if not self.view else 1,
-                                                  shuffle=False,
-                                                  num_workers=8,
-                                                  worker_init_fn=self._worker_init_fn_)
-        return test_loader
+        # caption retrieval
+        (r1_t, r5_t, r10_t, medr_t, meanr_t) = i2t(img_embs, cap_embs, cap_lens, sims)
+        self.exp.retrieval_end_callback("i2t", r1_t, r5_t, r10_t, medr_t, meanr_t)
+        # image retrieval
+        (r1_i, r5_i, r10_i, medr_i, meanr_i) = t2i(img_embs, cap_embs, cap_lens, sims)
+        self.exp.retrieval_end_callback("t2i", r1_i, r5_i, r10_i, medr_i, meanr_i)
+        # sum of recalls to be used for early stopping
+        currscore = r1_t + r5_t + r10_t + r1_i + r5_i + r10_i
+        results = {
+            "r1_t": r1_t,
+            "r5_t": r5_t,
+            "r10_t": r10_t,
+            "medr_t": medr_t,
+            "meanr_t": meanr_t,
+            "r1_i": r1_i,
+            "r5_i": r5_i,
+            "r10_i": r10_i,
+            "medr_i": medr_i,
+            "meanr_i": meanr_i,
+        }
+        self.exp.eval_end_callback(val_loader.dataset.split, self.iters, results)
+        return currscore
 
-    def get_val_dataloader(self):
-        val_dataset = self.cfg.get_dataset('val')
-        val_loader = torch.utils.data.DataLoader(dataset=val_dataset,
-                                                 batch_size=self.cfg['batch_size'],
-                                                 shuffle=False,
-                                                 num_workers=8,
-                                                 worker_init_fn=self._worker_init_fn_)
-        return val_loader
+    def get_precomp_loader(
+        self, split: str, batch_size: int = 128, shuffle: bool = True
+    ) -> DataLoader:
+        """Returns torch.utils.data.DataLoader for custom coco dataset."""
+        self.cfg["datasets"][split]["parameters"]["vocab"] = self.vocab
+        dataset = self.cfg.get_dataset(split)
+        data_loader = DataLoader(
+            dataset=dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            pin_memory=True,
+            collate_fn=collate_fn,
+            worker_init_fn=self._worker_init_fn_,
+        )
+        return data_loader
 
     @staticmethod
     def _worker_init_fn_(_):
         torch_seed = torch.initial_seed()
-        np_seed = torch_seed // 2**32 - 1
+        np_seed = torch_seed // 2 ** 32 - 1
         random.seed(torch_seed)
         np.random.seed(np_seed)
-        
