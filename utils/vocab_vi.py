@@ -39,7 +39,7 @@ def load_rdrsegmenter():
     )
 
 
-class Vocabulary(object):
+class ViVocabulary(object):
     def __init__(
         self,
         word2id: Optional[dict] = {},
@@ -91,7 +91,7 @@ class Vocabulary(object):
 
     
     @classmethod
-    def load(cls, file_path: str) -> "Vocabulary":
+    def load(cls, file_path: str) -> "ViVocabulary":
         with open(file_path) as f:
             data = json.load(f)
         
@@ -111,7 +111,7 @@ class Vocabulary(object):
                        caption_path: str,
                        dataset: str,
                        tokenizer: Callable,
-                       occurrences_thres: int = 4) -> "Vocabulary":
+                       occurrences_thres: int = 4) -> "ViVocabulary":
         '''Read caption file and build a vocab list from those captions.'''
         
         counter = Counter()
@@ -146,7 +146,7 @@ class Vocabulary(object):
 
 def main(caption_path: str, dataset: str):
     rdrsegmenter = load_rdrsegmenter()
-    vocab = Vocabulary.build_from_txt(caption_path, dataset, rdrsegmenter.tokenize)
+    vocab = ViVocabulary.build_from_txt(caption_path, dataset, rdrsegmenter.tokenize)
     vocab.save(Path(caption_path) / dataset / ("%s_vocab.json" % dataset))
 
 
