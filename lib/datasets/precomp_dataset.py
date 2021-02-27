@@ -36,6 +36,7 @@ class PrecompDataset(data.Dataset):
                 self.tokens.append(_tokens)
                 if len(_tokens) > self.max_length:
                     self.max_length = len(_tokens)
+            self.max_length += 2 # for <start>, <end> tokens
 
         # Image features
         self.images = np.load(loc + "%s_ims.npy" % self.split)
