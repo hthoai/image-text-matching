@@ -34,7 +34,7 @@ def func_attention(
     if params["raw_feature_norm"] == "softmax":
         # --> (batch*sourceL, queryL)
         attn = attn.view(batch_size * sourceL, queryL)
-        attn = nn.Softmax()(attn)
+        attn = F.softmax(attn, dim=1)
         # --> (batch, sourceL, queryL)
         attn = attn.view(batch_size, sourceL, queryL)
     elif params["raw_feature_norm"] == "l2norm":
@@ -52,7 +52,7 @@ def func_attention(
     attn = torch.transpose(attn, 1, 2).contiguous()
     # --> (batch*queryL, sourceL)
     attn = attn.view(batch_size * queryL, sourceL)
-    attn = nn.Softmax()(attn * smooth)
+    attn = F.softmax(attn * smooth, dim=1)
     # --> (batch, queryL, sourceL)
     attn = attn.view(batch_size, queryL, sourceL)
     # --> (batch, sourceL, queryL)
