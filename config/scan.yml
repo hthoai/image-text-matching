@@ -1,28 +1,28 @@
 # Model settings
 val_step: 500 # number of steps to run validation
-model_checkpoint_interval: 2
+model_checkpoint_interval: 1
 seed: 21
 batch_size: 128 # size of a training mini-batch
-epochs: 30 # number of training epochs
+epochs: 15 # number of training epochs
+vocab: f30k_precomp_vocab
 model:
   name: SCAN
   parameters:
     precomp_enc_type: basic # basic|weight_norm
     no_imgnorm: True # do not normalize the image embeddings
     word_dim: 300 # dimensionality of the word embedding
-    bi_gru: True # use bidirectional GRU
+    use_bi_gru: True # use bidirectional GRU
     num_layers: 1 # number of GRU layers
     no_txtnorm: True # do not normalize the text embeddings
     img_dim: 2048 # dimensionality of the image embedding
     embed_size: 1024 # dimensionality of the joint embedding
     grad_clip: 2.
-loss_parameters:
-  cross_attn: t2i # t2i|i2t
-  raw_feature_norm: clipped_l2norm # clipped_l2norm|l2norm|clipped_l1norm|l1norm|no_norm|softmax
-  agg_func: LogSumExp # LogSumExp|Mean|Max|Sum
-  margin: 0.2 # rank loss margin
-  lambda_lse: 6. # attention LogSumExp temperature
-  lambda_softmax: 9. # attention softmax temperature
+    cross_attn: t2i # t2i|i2t
+    raw_feature_norm: clipped_l2norm # clipped_l2norm|l2norm|clipped_l1norm|l1norm|no_norm|softmax
+    agg_func: LogSumExp # LogSumExp|Mean|Max|Sum
+    margin: 0.2 # rank loss margin
+    lambda_lse: 6. # attention LogSumExp temperature
+    lambda_softmax: 9. # attention softmax temperature
 optimizer:
   name: Adam
   parameters:
@@ -35,17 +35,14 @@ datasets:
     type: PrecompDataset
     parameters:
       split: train
-      vocab: f30k_precomp_vocab
-      root: "datasets"
+      root: "datasets/f30k_precomp"
   test:
     type: PrecompDataset
     parameters:
       split: test
-      vocab: f30k_precomp_vocab
-      root: "datasets"
+      root: "datasets/f30k_precomp"
   dev:
     type: PrecompDataset
     parameters:
       split: dev
-      vocab: f30k_precomp_vocab
-      root: "datasets"
+      root: "datasets/f30k_precomp"
