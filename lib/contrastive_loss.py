@@ -1,6 +1,7 @@
+from typing import Tuple
+from torch import Tensor
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from utils.attention import xattn_score_t2i, xattn_score_i2t
 
@@ -14,13 +15,13 @@ class ContrastiveLoss(nn.Module):
 
     def __init__(
         self,
-        cross_attn,
-        raw_feature_norm,
-        agg_func,
-        margin,
-        lambda_lse,
-        lambda_softmax,
-        max_violation=False,
+        cross_attn: str,
+        raw_feature_norm: str,
+        agg_func: str,
+        margin: float,
+        lambda_lse: float,
+        lambda_softmax: float,
+        max_violation: bool=False,
     ):
         super(ContrastiveLoss, self).__init__()
         self.cross_attn = cross_attn
@@ -31,7 +32,7 @@ class ContrastiveLoss(nn.Module):
         self.lambda_softmax = lambda_softmax
         self.max_violation = max_violation
 
-    def forward(self, im, s, s_l):
+    def forward(self, im: Tensor, s: Tensor, s_l: int) -> float:
         params = {
             "lambda_softmax": self.lambda_softmax,
             "lambda_lse": self.lambda_lse,
@@ -66,4 +67,6 @@ class ContrastiveLoss(nn.Module):
         if self.max_violation:
             cost_s = cost_s.max(1)[0]
             cost_im = cost_im.max(0)[0]
+
         return cost_s.sum() + cost_im.sum()
+        
