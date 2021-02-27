@@ -13,8 +13,7 @@ from typing import Tuple
 from torch.functional import Tensor
 import torch.nn as nn
 
-from .image_encoder import EncoderImage
-from .text_encoder import EncoderText
+from .encoder import ImageEncoder, TextEncoder
 from lib.contrastive_loss import ContrastiveLoss
 
 # import torch_xla
@@ -48,10 +47,8 @@ class SCAN(nn.Module):
         super().__init__()
         # Build Models
         self.grad_clip = grad_clip
-        self.img_enc = EncoderImage(img_dim, embed_size, precomp_enc_type, no_imgnorm)
-        self.txt_enc = EncoderText(
-            vocab_size, word_dim, embed_size, num_layers, use_bi_gru, no_txtnorm
-        )
+        self.img_enc = ImageEncoder(img_dim, embed_size)
+        self.txt_enc = TextEncoder(vocab_size, word_dim, embed_size)
 
         # Loss function
         self.criterion = ContrastiveLoss(

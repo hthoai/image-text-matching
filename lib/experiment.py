@@ -12,7 +12,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 class Experiment:
-    
     def __init__(
         self,
         exp_name: str,

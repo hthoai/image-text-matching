@@ -1,5 +1,5 @@
 # -----------------------------------------------------------
-# Stacked Cross Attention Network implementation based on 
+# Stacked Cross Attention Network implementation based on
 # https://arxiv.org/abs/1803.08024.
 # "Stacked Cross Attention for Image-Text Matching"
 # Kuang-Huei Lee, Xi Chen, Gang Hua, Houdong Hu, Xiaodong He
@@ -20,7 +20,7 @@ from torch.autograd import Variable
 
 from utils.attention import xattn_score_t2i, xattn_score_i2t
 
-DEVICE = 'cuda'
+DEVICE = "cuda"
 
 
 class AverageMeter(object):
@@ -39,16 +39,15 @@ class AverageMeter(object):
         self.val = val
         self.sum += val * n
         self.count += n
-        self.avg = self.sum / (.0001 + self.count)
+        self.avg = self.sum / (0.0001 + self.count)
 
     def __str__(self):
-        """String representation for logging
-        """
+        """String representation for logging"""
         # for values that should be recorded exactly e.g. iteration number
         if self.count == 0:
             return str(self.val)
         # for stats
-        return '%.4f (%.4f)' % (self.val, self.avg)
+        return "%.4f (%.4f)" % (self.val, self.avg)
 
 
 class LogCollector(object):
@@ -65,25 +64,22 @@ class LogCollector(object):
         self.meters[k].update(v, n)
 
     def __str__(self):
-        """Concatenate the meters in one log line
-        """
-        s = ''
+        """Concatenate the meters in one log line"""
+        s = ""
         for i, (k, v) in enumerate(self.meters.items()):
             if i > 0:
-                s += '  '
-            s += k + ' ' + str(v)
+                s += "  "
+            s += k + " " + str(v)
         return s
 
-    def tb_log(self, tb_logger, prefix='', step=None):
-        """Log using tensorboard
-        """
+    def tb_log(self, tb_logger, prefix="", step=None):
+        """Log using tensorboard"""
         for k, v in self.meters.items():
             tb_logger.log_value(prefix + k, v.val, step=step)
 
 
 def encode_data(model, data_loader, log_step=10, logging=print):
-    """Encode all images and captions loadable by `data_loader`
-    """
+    """Encode all images and captions loadable by `data_loader`"""
     batch_time = AverageMeter()
     val_logger = LogCollector()
 
@@ -111,17 +107,19 @@ def encode_data(model, data_loader, log_step=10, logging=print):
 
         # compute the embeddings
         img_emb, cap_emb, cap_len = model(images, captions, lengths)
-        #print(img_emb)
+        # print(img_emb)
         if img_embs is None:
             if img_emb.dim() == 3:
-                img_embs = np.zeros((len(data_loader.dataset), img_emb.size(1), img_emb.size(2)))
+                img_embs = np.zeros(
+                    (len(data_loader.dataset), img_emb.size(1), img_emb.size(2))
+                )
             else:
                 img_embs = np.zeros((len(data_loader.dataset), img_emb.size(1)))
             cap_embs = np.zeros((len(data_loader.dataset), max_n_word, cap_emb.size(2)))
             cap_lens = [0] * len(data_loader.dataset)
         # cache embeddings
         img_embs[ids] = img_emb.data.cpu().numpy().copy()
-        cap_embs[ids,:max(lengths),:] = cap_emb.data.cpu().numpy().copy()
+        cap_embs[ids, : max(lengths), :] = cap_emb.data.cpu().numpy().copy()
         for j, nid in enumerate(ids):
             cap_lens[nid] = cap_len[j]
 
@@ -134,12 +132,13 @@ def encode_data(model, data_loader, log_step=10, logging=print):
         end = time.time()
 
         if i % log_step == 0:
-            logging('Test: [{0}/{1}]\t'
-                    '{e_log}\t'
-                    'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                    .format(
-                        i, len(data_loader), batch_time=batch_time,
-                        e_log=str(model.logger)))
+            logging(
+                "Test: [{0}/{1}]\t"
+                "{e_log}\t"
+                "Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t".format(
+                    i, len(data_loader), batch_time=batch_time, e_log=str(model.logger)
+                )
+            )
         del images, captions
     return img_embs, cap_embs, cap_lens
 
@@ -250,11 +249,11 @@ def softmax(X, axis):
     """
     y = np.atleast_2d(X)
     # subtract the max for numerical stability
-    y = y - np.expand_dims(np.max(y, axis = axis), axis)
+    y = y - np.expand_dims(np.max(y, axis=axis), axis)
     # exponentiate y
     y = np.exp(y)
     # take the sum along the specified axis
-    ax_sum = np.expand_dims(np.sum(y, axis = axis), axis)
+    ax_sum = np.expand_dims(np.sum(y, axis=axis), axis)
     # finally: divide elementwise
     p = y / ax_sum
     return p
@@ -264,22 +263,24 @@ def shard_xattn_t2i(images, captions, caplens, params, shard_size=128):
     """
     Computer pairwise t2i image-caption distance with locality sharding
     """
-    n_im_shard = (len(images)-1)//shard_size + 1
-    n_cap_shard = (len(captions)-1)//shard_size + 1
-    
+    n_im_shard = (len(images) - 1) // shard_size + 1
+    n_cap_shard = (len(captions) - 1) // shard_size + 1
+
     d = np.zeros((len(images), len(captions)))
     for i in range(n_im_shard):
-        im_start, im_end = shard_size*i, min(shard_size*(i+1), len(images))
+        im_start, im_end = shard_size * i, min(shard_size * (i + 1), len(images))
         for j in range(n_cap_shard):
-            sys.stdout.write('\r>> shard_xattn_t2i batch (%d,%d)' % (i,j))
-            cap_start, cap_end = shard_size*j, min(shard_size*(j+1), len(captions))
+            sys.stdout.write("\r>> shard_xattn_t2i batch (%d,%d)" % (i, j))
+            cap_start, cap_end = shard_size * j, min(
+                shard_size * (j + 1), len(captions)
+            )
             with torch.no_grad():
                 im = torch.from_numpy(images[im_start:im_end]).cuda()
                 s = torch.from_numpy(captions[cap_start:cap_end]).cuda()
             l = caplens[cap_start:cap_end]
             sim = xattn_score_t2i(im, s, l, params)
             d[im_start:im_end, cap_start:cap_end] = sim.data.cpu().numpy()
-    sys.stdout.write('\n')
+    sys.stdout.write("\n")
     return d
 
 
@@ -287,22 +288,24 @@ def shard_xattn_i2t(images, captions, caplens, params, shard_size=128):
     """
     Computer pairwise i2t image-caption distance with locality sharding
     """
-    n_im_shard = (len(images)-1)//shard_size + 1
-    n_cap_shard = (len(captions)-1)//shard_size + 1
-    
+    n_im_shard = (len(images) - 1) // shard_size + 1
+    n_cap_shard = (len(captions) - 1) // shard_size + 1
+
     d = np.zeros((len(images), len(captions)))
     for i in range(n_im_shard):
-        im_start, im_end = shard_size*i, min(shard_size*(i+1), len(images))
+        im_start, im_end = shard_size * i, min(shard_size * (i + 1), len(images))
         for j in range(n_cap_shard):
-            sys.stdout.write('\r>> shard_xattn_i2t batch (%d,%d)' % (i,j))
-            cap_start, cap_end = shard_size*j, min(shard_size*(j+1), len(captions))
+            sys.stdout.write("\r>> shard_xattn_i2t batch (%d,%d)" % (i, j))
+            cap_start, cap_end = shard_size * j, min(
+                shard_size * (j + 1), len(captions)
+            )
             with torch.no_grad():
                 im = torch.from_numpy(images[im_start:im_end]).cuda()
                 s = torch.from_numpy(captions[cap_start:cap_end]).cuda()
             l = caplens[cap_start:cap_end]
             sim = xattn_score_i2t(im, s, l, params)
             d[im_start:im_end, cap_start:cap_end] = sim.data.cpu().numpy()
-    sys.stdout.write('\n')
+    sys.stdout.write("\n")
     return d
 
 

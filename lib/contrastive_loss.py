@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from utils.attention import xattn_score_t2i, xattn_score_i2t
 
-DEVICE = 'cuda'
+DEVICE = "cuda"
 
 
 class ContrastiveLoss(nn.Module):
