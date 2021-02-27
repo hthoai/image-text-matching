@@ -57,14 +57,14 @@ class Runner:
         model = self.cfg.get_model(self.vocab_size)
         model = model.to(self.device)
         optimizer = self.cfg.get_optimizer(model.parameters())
-        # scheduler = self.cfg.get_lr_scheduler(optimizer)
+        scheduler = self.cfg.get_lr_scheduler(optimizer)
         if self.resume:
             last_epoch, model, optimizer = self.exp.load_last_train_state(
                 model, model.optimizer
             )
             starting_epoch = last_epoch + 1
         max_epochs = self.cfg["epochs"]
-        train_loader = self.get_precomp_loader("train")
+        train_loader = self.get_precomp_loader("dev")
         val_loader = self.get_precomp_loader("dev")
         # loss_parameters = self.cfg.get_loss_parameters()
         for epoch in trange(
@@ -156,7 +156,7 @@ class Runner:
         self, split: str, batch_size: int = 128, shuffle: bool = True
     ) -> DataLoader:
         """Returns torch.utils.data.DataLoader for custom coco dataset."""
-        self.cfg["datasets"][split]["parameters"]["vocab"] = self.vocab
+        # self.cfg["datasets"][split]["parameters"]["vocab"] = self.vocab
         dataset = self.cfg.get_dataset(split)
         data_loader = DataLoader(
             dataset=dataset,
