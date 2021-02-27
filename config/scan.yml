@@ -26,21 +26,18 @@ model:
 optimizer:
   name: Adam
   parameters:
-    lr: 0.0003
-lr_scheduler:
-  name: CosineAnnealingLR
-  parameters:
-    T_max: 492700 # 100 * 4927 iterations
+    lr: 0.0002 # initial learning rate
+lr_update: 15 # number of epochs to update the learning rate
 
 # Dataset settings
 datasets:
   train:
-    type: GalaxyDataset
+    type: PrecompDataset
     parameters:
       split: train
       root: "datasets/f30k_precomp"
   test:
-    type: GalaxyDataset
+    type: PrecompDataset
     parameters:
       split: test
       root: "datasets/f30k_precomp"
