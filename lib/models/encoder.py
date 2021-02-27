@@ -16,8 +16,6 @@ class ImageEncoder(nn.Module):
         
         self.fc = nn.Linear(img_size, enc_size)
 
-        self.fc = nn.Linear(img_dim, emb_dim)
-
         self.init_weights()
 
     def init_weights(self):
@@ -86,7 +84,7 @@ class TextEncoder(nn.Module):
         
 
         # avg pooling over 2 direction
-        cap_emb = cap_emb.view(batch_size, seq_length, 2, self.emb_size).mean(axis = -2)
+        cap_emb = cap_emb.view(batch_size, seq_length, 2, self.enc_size).mean(axis = -2)
         # cap_emb: [batch size, seq len, enc size]
 
         # norm in the joint embedding space
