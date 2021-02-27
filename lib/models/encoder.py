@@ -20,8 +20,7 @@ class ImageEncoder(nn.Module):
 
     def init_weights(self):
         """ Xavier initialization for the fully connected layer"""
-
-        pass
+        nn.init.kaiming_uniform(self.fc.weight)
 
     def forward(self, images: Tensor) -> Tensor:
         """Extract image features and project them onto joint embedding space"""
@@ -57,7 +56,7 @@ class TextEncoder(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        pass
+        nn.init.xavier_normal(self.embedding)
 
     def forward(self,
                 cap: Tensor,
