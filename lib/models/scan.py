@@ -1,13 +1,3 @@
-# -----------------------------------------------------------
-# Stacked Cross Attention Network implementation based on
-# https://arxiv.org/abs/1803.08024.
-# "Stacked Cross Attention for Image-Text Matching"
-# Kuang-Huei Lee, Xi Chen, Gang Hua, Houdong Hu, Xiaodong He
-#
-# Writen by Kuang-Huei Lee, 2018
-# ---------------------------------------------------------------
-"""SCAN model"""
-
 from typing import Tuple
 
 from torch.functional import Tensor
@@ -15,9 +5,6 @@ import torch.nn as nn
 
 from .encoder import ImageEncoder, TextEncoder
 from lib.contrastive_loss import ContrastiveLoss
-
-# import torch_xla
-# import torch_xla.core.xla_model as xm
 
 
 class SCAN(nn.Module):
