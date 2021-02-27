@@ -102,7 +102,7 @@ class Runner:
 
                 self.iters += 1
                 if self.iters % self.cfg["val_step"] == 0:
-                    self.eval(model, val_loader)
+                    self.eval(model, val_loader, self.exp)
             self.exp.epoch_end_callback(epoch, max_epochs, model, optimizer)
 
             # Validate
@@ -111,11 +111,11 @@ class Runner:
             #     self.eval(model)
         self.exp.train_end_callback()
 
-    def eval(self, model: Any, val_loader: DataLoader) -> float:
+    def eval(self, model: Any, val_loader: DataLoader, exp: Experiment) -> float:
         self.exp.eval_start_callback(self.cfg)
         params = self.cfg["model"]["parameters"]
         # compute the encoding for all the validation images and captions
-        img_embs, cap_embs, cap_lens = encode_data(model, val_loader)
+        img_embs, cap_embs, cap_lens = encode_data(model, val_loader, exp)
 
         img_embs = np.array([img_embs[i] for i in range(0, len(img_embs), 5)])
 
