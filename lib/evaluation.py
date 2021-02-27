@@ -16,7 +16,6 @@ import numpy as np
 from collections import OrderedDict
 
 import torch
-from torch.autograd import Variable
 
 from utils.attention import xattn_score_t2i, xattn_score_i2t
 
@@ -94,9 +93,9 @@ def encode_data(model, data_loader, log_step=10, logging=print):
     cap_embs = None
     cap_lens = None
 
-    max_n_word = 0
-    for i, (images, captions, lengths, ids) in enumerate(data_loader):
-        max_n_word = max(max_n_word, max(lengths))
+    max_n_word = data_loader.dataset.max_length
+    # for i, (images, captions, lengths, ids) in enumerate(data_loader):
+    #     max_n_word = max(max_n_word, max(lengths))
 
     for i, (images, captions, lengths, ids) in enumerate(data_loader):
         # load to gpu
