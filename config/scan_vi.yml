@@ -1,5 +1,5 @@
 # Model settings
-val_step: 500 # number of steps to run validation
+val_step: 1 # number of steps to run validation
 model_checkpoint_interval: 1
 seed: 21
 batch_size: 128 # size of a training mini-batch
@@ -27,25 +27,22 @@ optimizer:
   name: Adam
   parameters:
     lr: 0.0002 # initial learning rate
-lr_scheduler:
-  name: CosineAnnealingLR
-  parameters:
-    T_max: 166650 # 15 * 11110 iterations
+lr_update: 15 # number of epochs to update the learning rate
 
 # Dataset settings
 datasets:
   train:
-    type: PrecompDataset
+    type: PrecompViDataset
     parameters:
       split: train
       root: "datasets/f30k_precomp"
   test:
-    type: PrecompDataset
+    type: PrecompViDataset
     parameters:
       split: test
       root: "datasets/f30k_precomp"
   dev:
-    type: PrecompDataset
+    type: PrecompViDataset
     parameters:
       split: dev
       root: "datasets/f30k_precomp"
