@@ -42,7 +42,7 @@ class SCAN(nn.Module):
         # Loss function
         self.criterion = ContrastiveLoss(margin)
 
-    def forward(self, images: Tensor, captions: Tensor, max_seq_len: Tensor) -> float:
+    def forward(self, images: Tensor, captions: Tensor, cap_lens: Tensor) -> Tensor:
         """
         Parameters
         ----------
@@ -52,61 +52,63 @@ class SCAN(nn.Module):
 
         Returns
         -------
-        sim_scores: (batch, batch)
+        sim_scores: (batch cap, batch image)
         """
         # Projecting the image/caption to embedding dimensions
         img_embs = self.img_enc(images)
-        cap_embs, cap_lens = self.txt_enc(captions, max_seq_len)
+        cap_embs = self.txt_enc(captions, cap_lens)
         # -> img_embs: (batch, regions, hidden)
         # -> cap_embs: (batch, max_seq_len, hidden)
 
         # Compute similarity between each region and each token
-        # cos(u, v) = (u * v) / (||u|| * ||v||)
-        #           = (u / ||u||) * (v / ||v||)
+        # cos(u, v) = (u @ v) / (||u|| * ||v||)
+        #           = (u / ||u||) @ (v / ||v||)
         img_embs = F.normalize(img_embs, dim=-1)
         cap_embs = F.normalize(cap_embs, dim=-1)
 
-        img_embs = img_embs.unsqueeze(0)
-        cap_embs = img_embs.unsqueeze(1)
+        img_embs.unsqueeze_(0)
+        cap_embs.unsqueeze_(1)
         # -> img_embs: (1, batch, regions, hidden)
         # -> cap_embs: (batch, 1, max_seq_len, hidden)
 
-        # After normalizing: cos(u, v) = u * v
-        sim_region_token = torch.matmul(cap_embs, img_embs.transpose(-1, -2))
-        # -> sim_region_token: (batch, batch, max_seq_len, regions)
+        # After normalizing: cos(u, v) = u @ v
+        sim_token_region = torch.matmul(cap_embs, img_embs.transpose(-1, -2))
+        # -> sim_token_region: (batch, batch, max_seq_len, regions)
 
-        alpha = self.lambda_softmax * sim_region_token
-        # -> alpha: (batch, batch, max_seq_len, regions)
+        att_score = self.lambda_softmax * sim_token_region
+        # -> att_score: (batch, batch, max_seq_len, regions)
 
         # Create mask from caption length
         # torch.arange(max_seq_len_SIZE).expand(batch_SIZE, max_seq_len_SIZE)
         padding_mask = torch.arange(cap_embs.size(2)).expand(
             cap_embs.size(0), cap_embs.size(2)
         ) >= cap_lens.unsqueeze(1)
-        padding_mask = padding_mask.unsqueeze(1)
-        padding_mask = padding_mask.unsqueeze(-1)
+        # padding_mask: (batch, max_seq_len)
+        
+        padding_mask.unsqueeze_(-1).unsqueeze_(1)
         # -> padding_mask: (batch, 1, max_seq_len, 1)
 
-        # Mask score of padding tokens
-        alpha.data.masked_fill_(padding_mask, -float('inf'))
-        attention_weights = F.softmax(alpha, dim=-1)
+        # mask score of padding tokens
+        att_score.data.masked_fill_(padding_mask, -float('inf'))
+
+        # softmax along regions axis
+        attention_weights = F.softmax(att_score, dim=-1)
         # -> attention_weights: (batch, batch, max_seq_len, regions)
 
-        # Calculate weighted sum of regions
+        # Calculate weighted sum of regions -> attended image vectors
         attention = torch.matmul(attention_weights, img_embs)
-        # -> attention: (batch, batch, max_seq_len, regions)
+        # -> attention: (batch, batch, max_seq_len, hidden_dim)
 
         # Calculate the importance of each attended image vector
-        # w.r.t each sentence's tokens
+        # w.r.t each token of sentence
         r = F.cosine_similarity(cap_embs, attention, dim=-1)
         # -> r: (batch, batch, max_seq_len)
 
         # Zeros similarity of padding tokens
-        padding_mask = padding_mask.squeeze().expand_as(r)
-        r[padding_mask] = 0
+        r[r.isnan()] = 0
 
-        # Average pooling
-        sim_scores = r.mean(dim=-1)
+        # Calculate similarity of each caption and each image by averaging all tokens in a caption.
+        sim_scores = r.sum(dim=-1) / cap_lens.view(-1, 1)
         # -> sim_score: (batch, batch)
 
         return sim_scores
