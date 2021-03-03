@@ -56,11 +56,11 @@ class TextEncoder(nn.Module):
         self.init_weights()
 
     def init_weights(self):
-        nn.init.xavier_normal(self.embedding)
+        nn.init.xavier_normal(self.embedding.weight)
 
     def forward(self,
                 cap: Tensor,
-                cap_length: int) -> Tuple[Tensor, Tensor]:
+                cap_length: Tensor) -> Tensor:
 
         # cap [batch size, seq len]
         # cap_len [batch size]
@@ -73,7 +73,7 @@ class TextEncoder(nn.Module):
         packed_outputs, _ = self.rnn(packed_embedded)
         # packed_outputs is a packed sequence containing all hidden states
 
-        cap_emb, cap_len = pad_packed_sequence(packed_outputs, batch_first=True)
+        cap_emb, _ = pad_packed_sequence(packed_outputs, batch_first=True)
         # cap_emb: [batch size, seq len, 2 * enc_size]
 
         batch_size = cap.shape[0]
@@ -90,4 +90,4 @@ class TextEncoder(nn.Module):
         cap_emb = F.normalize(cap_emb, p=2, dim=-1)
         # cap_emb: [batch size, seq len, enc size]
 
-        return cap_emb, cap_len
+        return cap_emb
