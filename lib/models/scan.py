@@ -1,4 +1,3 @@
-from typing import List, Tuple
 import torch
 
 from torch.functional import Tensor
@@ -6,7 +5,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 from .encoder import ImageEncoder, TextEncoder
-from lib.contrastive_loss import ContrastiveLoss
+
 
 
 class SCAN(nn.Module):
@@ -29,18 +28,13 @@ class SCAN(nn.Module):
         embed_size: int,
         lambda_softmax: float,
         grad_clip: float,
-        margin: float,
     ):
         super().__init__()
         # Build Models
         self.lambda_softmax = lambda_softmax
         self.grad_clip = grad_clip
-        self.margin = margin
         self.img_enc = ImageEncoder(img_dim, embed_size)
         self.txt_enc = TextEncoder(vocab_size, word_dim, embed_size)
-
-        # Loss function
-        self.criterion = ContrastiveLoss(margin)
 
     def forward(self, images: Tensor, captions: Tensor, cap_lens: Tensor) -> Tensor:
         """
