@@ -1,4 +1,3 @@
-import pickle
 import random
 import logging
 import os
@@ -56,42 +55,51 @@ class Runner:
 
         model = self.cfg.get_model(self.vocab_size)
         model = model.to(self.device)
+        criterion = self.cfg.get_criterion()
         optimizer = self.cfg.get_optimizer(model.parameters())
-        scheduler = self.cfg.get_lr_scheduler(optimizer)
+        # scheduler = self.cfg.get_lr_scheduler(optimizer)
+
         if self.resume:
             last_epoch, model, optimizer = self.exp.load_last_train_state(
                 model, model.optimizer
             )
             starting_epoch = last_epoch + 1
         max_epochs = self.cfg["epochs"]
-        train_loader = self.get_precomp_loader("dev")
-        val_loader = self.get_precomp_loader("dev")
-        # loss_parameters = self.cfg.get_loss_parameters()
+
+        train_loader = self.get_precomp_loader(split="dev", batch_size=128)
+        val_loader = self.get_precomp_loader(split="dev", batch_size=1)
+
         for epoch in trange(
             starting_epoch, max_epochs + 1, initial=starting_epoch - 1, total=max_epochs
         ):
             self.exp.epoch_start_callback(epoch, max_epochs)
             pbar = tqdm(train_loader)
+            model.train()
+
             for idx, (images, captions, lengths, ids) in enumerate(pbar):
-                model.train()
-                # load to gpu
+                # Load to GPU
                 images = images.to(self.device)
                 captions = captions.to(self.device)
-                # zero the parameter gradients
+
+                # Zero the parameter gradients
                 optimizer.zero_grad()
-                # compute the embeddings
-                img_emb, cap_emb, cap_lens = model(images, captions, lengths)
-                # record loss
-                loss = model.loss(img_emb, cap_emb, cap_lens)
-                # backward
+                # Compute similarity
+                scores = model(images, captions, lengths)
+
+                # Record loss
+                loss = criterion(scores)
+                # Backward
                 loss.backward()
-                # gradient clipping
+                # Gradient clipping
                 if model.grad_clip > 0:
                     clip_grad_norm_(model.parameters(), model.grad_clip)
-                # optimize
-                optimizer.step()
 
-                # log
+                # Optimize
+                optimizer.step()
+                # Scheduler step (iteration based)
+                # scheduler.step()
+
+                # Log to progressing bar
                 postfix_dict = {}
                 postfix_dict["lr"] = optimizer.param_groups[0]["lr"]
                 self.exp.iter_end_callback(
@@ -102,13 +110,11 @@ class Runner:
 
                 self.iters += 1
                 if self.iters % self.cfg["val_step"] == 0:
+                    model.eval()
                     self.eval(model, val_loader, self.exp)
+                    model.train()
             self.exp.epoch_end_callback(epoch, max_epochs, model, optimizer)
 
-            # Validate
-            # iters += 1
-            # if iters % self.cfg['val_step'] == 0:
-            #     self.eval(model)
         self.exp.train_end_callback()
 
     def eval(self, model: Any, val_loader: DataLoader, exp: Experiment) -> float:
