@@ -3,9 +3,7 @@ import logging
 import os
 from typing import Any
 
-import cv2
 import torch
-from torch._C import device
 from torch.nn.utils.clip_grad import clip_grad_norm_
 from torch.utils.data import DataLoader
 import numpy as np
@@ -66,7 +64,7 @@ class Runner:
             starting_epoch = last_epoch + 1
         max_epochs = self.cfg["epochs"]
 
-        train_loader = self.get_precomp_loader(split="dev", batch_size=128)
+        train_loader = self.get_precomp_loader(split="train", batch_size=128)
         val_loader = self.get_precomp_loader(split="dev", batch_size=1)
 
         for epoch in trange(
