@@ -30,8 +30,8 @@ class TripletLoss(nn.Module):
         scores.fill_diagonal_(0)
 
         # get hardest negatives
-        hardest_neq_images = scores.max(dim=1)
-        hardest_neq_captions = scores.max(dim=0)
+        hardest_neq_images = scores.max(dim=1)[0]
+        hardest_neq_captions = scores.max(dim=0)[0]
 
         loss_captions = (self.margin - positive_scores + hardest_neq_captions).clamp(
             min=0
