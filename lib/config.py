@@ -37,7 +37,7 @@ class Config:
         )
 
     def get_criterion(self) -> Any:
-        name = self.config["criterion"]["names"]
+        name = self.config["criterion"]["name"]
         parameters = self.config["criterion"]["parameters"]
         return getattr(criterions, name)(**parameters)
 
