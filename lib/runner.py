@@ -1,13 +1,13 @@
 import random
 import logging
 import os
-from typing import Any
 
 import torch
 from torch.nn.utils.clip_grad import clip_grad_norm_
 from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm, trange
+import torch.nn as nn
 
 from utils.vocab import deserialize_vocab
 from lib.datasets.precomp_dataset import collate_fn
@@ -115,38 +115,36 @@ class Runner:
 
         self.exp.train_end_callback()
 
-    def eval(self, model: Any, val_loader: DataLoader, exp: Experiment) -> float:
+    def eval(self,
+             model: nn.Module,
+             val_loader: DataLoader,
+             exp: Experiment) -> torch.Tensor:
+
         self.exp.eval_start_callback(self.cfg)
-        params = self.cfg["model"]["parameters"]
-        # compute the encoding for all the validation images and captions
-        img_embs, cap_embs, cap_lens = encode_data(model, val_loader, exp)
+        model.eval()
 
-        img_embs = np.array([img_embs[i] for i in range(0, len(img_embs), 5)])
+        pbar = tqdm(val_loader)
 
-        start = time.time()
-        if params["cross_attn"] == "t2i":
-            sims = shard_xattn_t2i(img_embs, cap_embs, cap_lens, params, shard_size=128)
-        elif params["cross_attn"] == "i2t":
-            sims = shard_xattn_i2t(img_embs, cap_embs, cap_lens, params, shard_size=128)
-        else:
-            raise NotImplementedError
-        end = time.time()
-        print("Calculate similarity time:", end - start)
+        n_cap = None
+        n_img = None
+        batch_size = None
 
-        # caption retrieval
-        (r1_t, r5_t, r10_t, medr_t, meanr_t) = i2t(img_embs, cap_embs, cap_lens, sims)
-        self.exp.retrieval_end_callback("i2t", r1_t, r5_t, r10_t, medr_t, meanr_t)
+        score_matrix = np.zeros(n_img, n_cap)
+
+        for idx, (images, captions, cap_lens) in enumerate(pbar):
+            # load to gpu
+            images = images.to(self.device)
+            captions = captions.to(self.device)
+            # compute the embeddings
+            cap_id_start, cap_id_end = idx * batch_size, min((idx+1) * batch_size - 1, n_cap) 
+            score_matrix[cap_id_start:cap_id_end] = model(images, captions, cap_lens)
+
         # image retrieval
-        (r1_i, r5_i, r10_i, medr_i, meanr_i) = t2i(img_embs, cap_embs, cap_lens, sims)
+        (r1_i, r5_i, r10_i, medr_i, meanr_i) = ComputeMetric(score_matrix)
         self.exp.retrieval_end_callback("t2i", r1_i, r5_i, r10_i, medr_i, meanr_i)
         # sum of recalls to be used for early stopping
-        currscore = r1_t + r5_t + r10_t + r1_i + r5_i + r10_i
+        currscore = r1_i + r5_i + r10_i
         results = {
-            "r1_t": r1_t,
-            "r5_t": r5_t,
-            "r10_t": r10_t,
-            "medr_t": medr_t,
-            "meanr_t": meanr_t,
             "r1_i": r1_i,
             "r5_i": r5_i,
             "r10_i": r10_i,
