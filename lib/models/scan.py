@@ -79,7 +79,7 @@ class SCAN(nn.Module):
         ) >= cap_lens.unsqueeze(1)
         # padding_mask: (batch, max_seq_len)
         
-        padding_mask.unsqueeze_(-1).unsqueeze_(1)
+        padding_mask = padding_mask.unsqueeze(-1).unsqueeze(1).to(cap_embs.device)
         # -> padding_mask: (batch, 1, max_seq_len, 1)
 
         # mask score of padding tokens
@@ -102,7 +102,7 @@ class SCAN(nn.Module):
         r[r.isnan()] = 0
 
         # Calculate similarity of each caption and each image by averaging all tokens in a caption.
-        sim_scores = r.sum(dim=-1) / cap_lens.view(-1, 1)
+        sim_scores = r.sum(dim=-1) / cap_lens.view(-1, 1).to(cap_embs.device)
         # -> sim_score: (batch, batch)
 
         return sim_scores
