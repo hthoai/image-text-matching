@@ -2,6 +2,7 @@ from typing import Any
 import yaml
 import torch
 import lib.models as models
+import lib.criterions as criterions
 import lib.datasets as datasets
 
 
@@ -35,8 +36,10 @@ class Config:
             model_parameters, **self.config["optimizer"]["parameters"]
         )
 
-    # def get_loss_parameters(self):
-    #     return self.config["loss_parameters"]
+    def get_criterion(self) -> Any:
+        name = self.config["criterion"]["names"]
+        parameters = self.config["criterion"]["parameters"]
+        return getattr(criterions, name)(**parameters)
 
     def get_lr_update(self) -> None:
         return self.config["lr_update"]
