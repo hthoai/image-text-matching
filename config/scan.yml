@@ -20,7 +20,7 @@ model:
     # cross_attn: t2i # t2i|i2t
     # raw_feature_norm: clipped_l2norm # clipped_l2norm|l2norm|clipped_l1norm|l1norm|no_norm|softmax
     # agg_func: LogSumExp # LogSumExp|Mean|Max|Sum
-    margin: 0.2 # rank loss margin
+    # margin: 0.2 # rank loss margin
     # lambda_lse: 6. # attention LogSumExp temperature
     lambda_softmax: 9. # attention softmax temperature
 criterion:
