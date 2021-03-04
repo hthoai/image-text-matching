@@ -94,6 +94,7 @@ def collate_fn(data):
     for i, cap in enumerate(captions):
         end = lengths[i]
         targets[i, :end] = cap[:end]
+    lengths = torch.LongTensor(lengths)
 
     return images, targets, lengths, ids
 
