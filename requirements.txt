@@ -1,0 +1,5 @@
+torch       == 1.7.1+cu101
+PyYAML      == 5.4.1
+nltk        == 3.5
+vncorenlp   == 1.0.3
+tensorboard == 2.4.1
