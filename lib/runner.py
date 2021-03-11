@@ -1,6 +1,7 @@
 import random
 import logging
 import os
+from typing import Callable, Tuple
 
 import torch
 from torch.nn.utils.clip_grad import clip_grad_norm_
@@ -10,8 +11,11 @@ from tqdm import tqdm, trange
 import torch.nn as nn
 
 from utils.vocab import deserialize_vocab
+from utils.read_all_images import read_all_images
+from utils.sub_sim import sub_sim
 from lib.datasets.precomp_dataset import collate_fn
-from lib.evaluation import *
+from lib.datasets.eval_dataset import eval_collate_fn
+from lib.evaluation import ComputeMetric
 from lib.config import Config
 from lib.experiment import Experiment
 
@@ -64,11 +68,15 @@ class Runner:
             starting_epoch = last_epoch + 1
         max_epochs = self.cfg["epochs"]
 
-        train_loader = self.get_precomp_loader(split="train", batch_size=128)
-        val_loader = self.get_precomp_loader(split="dev", batch_size=1)
+        train_loader = self.get_precomp_loader(
+            split="dev", collate_fn=collate_fn, batch_size=64
+        )
+        # val_loader = self.get_precomp_loader(
+        #     split="test", collate_fn=eval_collate_fn, batch_size=4
+        # )
 
         for epoch in trange(
-            starting_epoch, max_epochs + 1, initial=starting_epoch - 1, total=max_epochs
+            starting_epoch, max_epochs + 1, initial=starting_epoch, total=max_epochs
         ):
             self.exp.epoch_start_callback(epoch, max_epochs)
             pbar = tqdm(train_loader)
@@ -83,14 +91,15 @@ class Runner:
                 optimizer.zero_grad()
                 # Compute similarity
                 scores = model(images, captions, lengths)
+                # scores = sub_sim(images, captions, lengths, 4, 2, model, self.device)
 
                 # Record loss
                 loss = criterion(scores)
                 # Backward
                 loss.backward()
                 # Gradient clipping
-                if model.grad_clip > 0:
-                    clip_grad_norm_(model.parameters(), model.grad_clip)
+                # if model.grad_clip > 0:
+                #     clip_grad_norm_(model.parameters(), model.grad_clip)
 
                 # Optimize
                 optimizer.step()
@@ -107,58 +116,65 @@ class Runner:
                 pbar.set_postfix(ordered_dict=postfix_dict)
 
                 self.iters += 1
-                if self.iters % self.cfg["val_step"] == 0:
-                    model.eval()
-                    self.eval(model, val_loader, self.exp)
-                    model.train()
+                # if self.iters % self.cfg["val_step"] == 0:
+                #     model.eval()
+                #     self.eval(model, val_loader, self.exp)
+                #     model.train()
             self.exp.epoch_end_callback(epoch, max_epochs, model, optimizer)
 
         self.exp.train_end_callback()
 
-    def eval(self,
-             model: nn.Module,
-             val_loader: DataLoader,
-             exp: Experiment) -> torch.Tensor:
+    def eval(
+        self, model: nn.Module, val_loader: DataLoader, exp: Experiment
+    ) -> torch.Tensor:
 
         self.exp.eval_start_callback(self.cfg)
-        model.eval()
-
         pbar = tqdm(val_loader)
 
-        n_cap = None
-        n_img = None
-        batch_size = None
+        n_cap = len(val_loader.dataset)
+        n_img = n_cap // val_loader.dataset.im_div
+        batch_size = val_loader.batch_size
 
-        score_matrix = np.zeros(n_img, n_cap)
+        images = read_all_images("datasets/f30k_precomp", split="dev")
 
-        for idx, (images, captions, cap_lens) in enumerate(pbar):
-            # load to gpu
-            images = images.to(self.device)
-            captions = captions.to(self.device)
-            # compute the embeddings
-            cap_id_start, cap_id_end = idx * batch_size, min((idx+1) * batch_size - 1, n_cap) 
-            score_matrix[cap_id_start:cap_id_end] = model(images, captions, cap_lens)
+        score_matrix = torch.zeros((n_cap, n_img))
+        with torch.no_grad():
+            for idx, (captions, cap_lens, ids) in enumerate(pbar):
+                # load to gpu
+                images = images.to(self.device)
+                captions = captions.to(self.device)
+                # compute the embeddings
+                cap_id_start, cap_id_end = idx * batch_size, min(
+                    (idx + 1) * batch_size, n_cap
+                )
+                score_matrix[cap_id_start:cap_id_end] = model(
+                    images, captions, cap_lens
+                )
 
-        # image retrieval
-        (r1_i, r5_i, r10_i, medr_i, meanr_i) = ComputeMetric(score_matrix)
-        self.exp.retrieval_end_callback("t2i", r1_i, r5_i, r10_i, medr_i, meanr_i)
-        # sum of recalls to be used for early stopping
-        currscore = r1_i + r5_i + r10_i
-        results = {
-            "r1_i": r1_i,
-            "r5_i": r5_i,
-            "r10_i": r10_i,
-            "medr_i": medr_i,
-            "meanr_i": meanr_i,
-        }
-        self.exp.eval_end_callback(val_loader.dataset.split, self.iters, results)
-        return currscore
+            # image retrieval
+            (r1_i, r5_i, r10_i, medr_i, meanr_i) = ComputeMetric(score_matrix)
+            self.exp.retrieval_end_callback("t2i", r1_i, r5_i, r10_i, medr_i, meanr_i)
+            # sum of recalls to be used for early stopping
+            currscore = r1_i + r5_i + r10_i
+            results = {
+                "r1_i": r1_i,
+                "r5_i": r5_i,
+                "r10_i": r10_i,
+                "medr_i": medr_i,
+                "meanr_i": meanr_i,
+            }
+            self.exp.eval_end_callback(val_loader.dataset.split, self.iters, results)
+            return currscore
 
     def get_precomp_loader(
-        self, split: str, batch_size: int = 128, shuffle: bool = True
+        self,
+        split: str,
+        collate_fn: Callable[[Tuple], Tuple],
+        batch_size: int = 128,
+        shuffle: bool = False,
     ) -> DataLoader:
         """Returns torch.utils.data.DataLoader for custom coco dataset."""
-        # self.cfg["datasets"][split]["parameters"]["vocab"] = self.vocab
+        self.cfg["datasets"][split]["parameters"]["vocab"] = self.vocab
         dataset = self.cfg.get_dataset(split)
         data_loader = DataLoader(
             dataset=dataset,
