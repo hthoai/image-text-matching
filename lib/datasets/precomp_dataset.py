@@ -97,15 +97,3 @@ def collate_fn(data):
     lengths = torch.LongTensor(lengths)
 
     return images, targets, lengths, ids
-
-
-def get_precomp_loader(dataset, batch_size=128, shuffle=True):
-    """Returns torch.utils.data.DataLoader for custom coco dataset."""
-    data_loader = torch.utils.data.DataLoader(
-        dataset=dataset,
-        batch_size=batch_size,
-        shuffle=shuffle,
-        pin_memory=True,
-        collate_fn=collate_fn,
-    )
-    return data_loader
