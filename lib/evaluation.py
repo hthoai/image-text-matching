@@ -19,7 +19,7 @@ def ComputeMetric(sim_score: torch.Tensor, return_ranks: bool=False) -> Tuple:
     r10 = (ranks < 10).sum() / ranks.size(0) * 100
 
     medr = ranks.median() + 1
-    meanr = ranks.mean() + 1
+    meanr = (ranks * 1.0).mean() + 1
     if return_ranks:
         return (r1, r5, r10, medr, meanr), (ranks, top1)
     else:
