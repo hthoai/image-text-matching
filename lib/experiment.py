@@ -200,6 +200,11 @@ class Experiment:
         self, type: str, r1: int, r5: int, r10: int, medr: int, meanr: int
     ) -> None:
         type_info = "Text to image" if (type == "t2i") else "Image to text"
+        r1 = r1.detach().numpy().item()
+        r5 = r5.detach().numpy().item()
+        r10 = r10.detach().numpy().item()
+        medr = medr.detach().numpy().item()
+        meanr = meanr.detach().numpy().item()
         self.logger.info(f"{type_info}: {r1}, {r5}, {r10}, {medr}, {meanr}")
 
 
@@ -223,13 +228,11 @@ class Experiment:
         self.logger.debug(
             f"Testing session finished on model after iter {iter_evaluated}"
         )
-        self.logger.info("Results:\n %s", str(results))
+        # self.logger.info("Results:\n %s", str(results))
         # Log tensorboard metrics
         for key in results:
             self.tensorboard_writer.add_scalar(
                 "{}_metrics/{}".format(dataset_split, key),
-                results[key],
+                results[key].detach().numpy().item(),
                 iter_evaluated,
             )
-
-
